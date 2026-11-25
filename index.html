@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>地ビール制覇マップ（みんな版）</title>
+<style>
+  :root{--amber:#e79b2d;--amber-dark:#c96a12;--bg:#faf6ee;--card:#fff;--ink:#2b2118;--muted:#8a7a63;--line:#e5dcc8}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:linear-gradient(135deg,#f7b733,#e79b2d);color:#fff;padding:18px 16px 14px}
+  header h1{margin:0;font-size:22px}
+  header p{margin:4px 0 0;font-size:13px;opacity:.92}
+  main{max-width:880px;margin:0 auto;padding:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  .progress-num{font-size:28px;font-weight:800}
+  .bar{height:12px;background:#eee3cb;border-radius:6px;overflow:hidden;margin-top:8px}
+  .bar>i{display:block;height:100%;background:var(--amber);width:0%}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  button{background:var(--amber);color:#fff;border:0;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:700;cursor:pointer}
+  button.sub{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  button.danger{background:#fff;color:#b3261e;border:1px solid #e5b4b0}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff}
+  label{font-size:13px;font-weight:700;color:var(--muted);display:block;margin:10px 0 4px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:560px){.grid2{grid-template-columns:1fr}}
+  svg{width:100%;height:auto;display:block}
+  svg path{stroke:#fff;stroke-width:.6;cursor:pointer}
+  .tiles{display:grid;gap:3px}
+  .tile{aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;cursor:pointer;text-align:center;padding:1px;line-height:1.1}
+  .drink{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .drink:last-child{border-bottom:0}
+  .drink img{width:64px;height:64px;object-fit:cover;border-radius:10px;flex:none;background:#eee}
+  .drink .meta{font-size:12px;color:var(--muted)}
+  .badge{display:inline-block;background:#fdf0d3;color:var(--amber-dark);border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700}
+  .mode{font-size:12px}
+  .mode.demo{background:#eee;color:#555}
+  .mode.live{background:#e2f4e5;color:#1c6b2a}
+  .hidden{display:none}
+  .note{font-size:12px;color:var(--muted);line-height:1.6}
+  #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#2b2118;color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s}
+  #toast.show{opacity:.94}
+  .pref-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
+  .pref-chip{border:1px solid var(--line);border-radius:10px;padding:8px;font-size:13px;cursor:pointer;background:#fff}
+  .pref-chip b{display:block;font-size:15px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🍺 地ビール制覇マップ（みんな版）</h1>
+  <p>みんなで飲んで、日本地図を塗りつぶそう</p>
+</header>
+<main>
+  <!-- ルーム -->
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <span class="badge mode demo" id="modeBadge">お試しモード（この端末だけ）</span>
+        <div style="margin-top:6px">ルーム: <b id="roomLabel">-</b></div>
+      </div>
+      <div class="row">
+        <button class="sub" id="copyLinkBtn">招待リンクをコピー</button>
+        <button class="sub" id="newRoomBtn">新しいルーム</button>
+        <button class="sub" id="settingsBtn">接続設定</button>
+      </div>
+    </div>
+    <div id="settings" class="hidden">
+      <p class="note">Supabaseに接続すると、友達の登録が全員に反映されます。未設定の間は「お試しモード」で、この端末の中だけに保存されます（共有されません）。設定方法は同梱の README を見てください。接続情報はこの端末のブラウザにだけ保存されます。</p>
+      <label>Supabase URL</label>
+      <input id="sbUrl" placeholder="https://xxxx.supabase.co">
+      <label>Supabase anon key</label>
+      <input id="sbKey" placeholder="eyJ...">
+      <div class="row" style="margin-top:10px">
+        <button id="saveSettingsBtn">保存して接続</button>
+        <button class="sub" id="clearSettingsBtn">接続を解除</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 進捗 -->
+  <section class="card">
+    <span class="progress-num" id="progNum">0 / 47県</span>
+    <span id="progPct" style="font-weight:700;color:var(--muted)"></span>
+    <span id="drinkCount" class="note"></span>
+    <div class="bar"><i id="progBar"></i></div>
+  </section>
+
+  <!-- 地図 -->
+  <section class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <b>日本地図</b>
+      <div class="row">
+        <button class="sub" id="viewMapBtn">地図</button>
+        <button class="sub" id="viewTileBtn">タイル</button>
+        <button class="sub" id="refreshBtn">更新</button>
+      </div>
+    </div>
+    <div id="mapWrap"><svg id="map" viewBox="0 0 800 820" role="img" aria-label="日本地図"></svg>
+    <p class="note" id="mapNote">地図データを読み込み中…</p></div>
+    <div id="tileWrap" class="hidden"><div class="tiles" id="tiles"></div></div>
+    <p class="note">色が濃い県ほど、みんなでたくさん飲んでいます。県をタップすると、その県の記録が見られます。</p>
+  </section>
+
+  <!-- 記録フォーム -->
+  <section class="card">
+    <b>飲んだ！を記録する</b>
+    <form id="drinkForm">
+      <div class="grid2">
+        <div><label>あなたのニックネーム *</label><input id="fNickname" required maxlength="30" placeholder="例: けい"></div>
+        <div><label>都道府県 *</label><select id="fPref" required></select></div>
+      </div>
+      <div class="grid2">
+        <div><label>ビール名 *</label><input id="fBeer" required maxlength="80" placeholder="例: よなよなエール"></div>
+        <div><label>ブルワリー</label><input id="fBrewery" maxlength="80"></div>
+      </div>
+      <div class="grid2">
+        <div><label>スタイル</label><input id="fStyle" maxlength="40" placeholder="例: ペールエール"></div>
+        <div><label>飲んだ日</label><input id="fDate" type="date"></div>
+      </div>
+      <div class="grid2">
+        <div><label>評価</label>
+          <select id="fRating"><option value="">—</option><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
+        <div><label>写真</label><input id="fPhoto" type="file" accept="image/*"></div>
+      </div>
+      <label>メモ</label><textarea id="fMemo" rows="2" maxlength="500"></textarea>
+      <div style="margin-top:12px"><button type="submit" style="width:100%">記録して地図を塗る</button></div>
+    </form>
+  </section>
+
+  <!-- 県の記録 -->
+  <section class="card hidden" id="prefCard">
+    <div class="row" style="justify-content:space-between"><b id="prefTitle"></b><button class="sub" id="closePrefBtn">閉じる</button></div>
+    <div id="prefDrinks"></div>
+  </section>
+
+  <!-- 最近の記録 -->
+  <section class="card">
+    <b>みんなの記録</b>
+    <div id="recent"></div>
+  </section>
+
+  <!-- 県リスト -->
+  <section class="card">
+    <b>都道府県リスト</b>
+    <div class="pref-list" id="prefList" style="margin-top:10px"></div>
+  </section>
+
+  <p class="note">使い方: ルームを作ったら「招待リンクをコピー」で友達に送ってください。同じリンクを開いた全員が同じ地図を見て、登録できます。Supabase未接続のお試しモードでは共有されません。</p>
+</main>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<script>
+"use strict";
+const PREFS = [
+ [1,"北海道",11,1],[2,"青森県",11,2],[3,"岩手県",11,3],[4,"宮城県",11,4],[5,"秋田県",10,3],
+ [6,"山形県",10,4],[7,"福島県",11,5],[8,"茨城県",11,6],[9,"栃木県",10,5],[10,"群馬県",9,5],
+ [11,"埼玉県",10,6],[12,"千葉県",11,7],[13,"東京都",10,7],[14,"神奈川県",10,8],[15,"新潟県",8,4],
+ [16,"富山県",7,4],[17,"石川県",6,4],[18,"福井県",6,5],[19,"山梨県",8,6],[20,"長野県",8,5],
+ [21,"岐阜県",7,5],[22,"静岡県",8,7],[23,"愛知県",7,6],[24,"三重県",7,7],[25,"滋賀県",6,6],
+ [26,"京都府",5,6],[27,"大阪府",5,7],[28,"兵庫県",4,6],[29,"奈良県",6,7],[30,"和歌山県",5,8],
+ [31,"鳥取県",3,6],[32,"島根県",2,6],[33,"岡山県",3,7],[34,"広島県",2,7],[35,"山口県",1,7],
+ [36,"徳島県",4,8],[37,"香川県",3,8],[38,"愛媛県",2,8],[39,"高知県",3,9],[40,"福岡県",1,8],
+ [41,"佐賀県",0,8],[42,"長崎県",0,9],[43,"熊本県",1,9],[44,"大分県",2,9],[45,"宮崎県",2,10],
+ [46,"鹿児島県",1,10],[47,"沖縄県",0,12]
+];
+const prefName = id => (PREFS.find(p=>p[0]===id)||[])[1] || "";
+const $ = s => document.querySelector(s);
+
+/* ---------- 状態 ---------- */
+function getRoom(){
+  const u = new URL(location.href);
+  let r = u.searchParams.get("room");
+  if(!r){ r = Math.random().toString(36).slice(2,8); u.searchParams.set("room", r); history.replaceState(null,"",u); }
+  return r;
+}
+const room = getRoom();
+(function adoptLinkConfig(){
+  const u = new URL(location.href);
+  const sb = u.searchParams.get("sb"), k = u.searchParams.get("k");
+  if(sb && k) localStorage.setItem("jb_config", JSON.stringify({url:sb, key:k}));
+})();
+const cfg = JSON.parse(localStorage.getItem("jb_config")||"null");
+const live = !!(cfg && cfg.url && cfg.key);
+let drinks = [];
+
+/* ---------- 接続 ---------- */
+function sbHeaders(extra){ return Object.assign({"apikey":cfg.key,"Authorization":"Bearer "+cfg.key,"Content-Type":"application/json"}, extra||{}); }
+async function fetchDrinks(){
+  if(live){
+    const res = await fetch(cfg.url.replace(/\/$/,"")+"/rest/v1/drinks?room_code=eq."+encodeURIComponent(room)+"&select=*&order=drank_on.desc,created_at.desc",{headers:sbHeaders()});
+    if(!res.ok) throw new Error("fetch "+res.status);
+    drinks = await res.json();
+  } else {
+    drinks = JSON.parse(localStorage.getItem("jb_drinks_"+room)||"[]");
+  }
+  render();
+}
+function saveLocal(){ localStorage.setItem("jb_drinks_"+room, JSON.stringify(drinks)); }
+
+async function addDrink(d, photoBlob){
+  if(live){
+    let photoUrl = null;
+    if(photoBlob){
+      const path = room+"/"+Date.now()+"_"+Math.random().toString(36).slice(2,8)+".jpg";
+      const up = await fetch(cfg.url.replace(/\/$/,"")+"/storage/v1/object/photos/"+path,{method:"POST",headers:{"apikey":cfg.key,"Authorization":"Bearer "+cfg.key,"Content-Type":"image/jpeg"},body:photoBlob});
+      if(!up.ok) throw new Error("photo "+up.status);
+      photoUrl = cfg.url.replace(/\/$/,"")+"/storage/v1/object/public/photos/"+path;
+    }
+    const res = await fetch(cfg.url.replace(/\/$/,"")+"/rest/v1/drinks",{method:"POST",headers:sbHeaders({"Prefer":"return=representation"}),body:JSON.stringify(Object.assign({},d,{photo_url:photoUrl}))});
+    if(!res.ok) throw new Error("insert "+res.status);
+  } else {
+    d.id = "local-"+Date.now();
+    d.photo_url = photoBlob ? await blobToDataUrl(photoBlob) : null;
+    drinks.unshift(d); saveLocal(); render();
+  }
+}
+async function deleteDrink(id){
+  if(live){
+    const res = await fetch(cfg.url.replace(/\/$/,"")+"/rest/v1/drinks?id=eq."+encodeURIComponent(id),{method:"DELETE",headers:sbHeaders()});
+    if(!res.ok) throw new Error("delete "+res.status);
+    await fetchDrinks();
+  } else {
+    drinks = drinks.filter(d=>String(d.id)!==String(id)); saveLocal(); render();
+  }
+}
+
+/* ---------- 写真の縮小 ---------- */
+function compressPhoto(file){
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const max = 1000, scale = Math.min(1, max/Math.max(img.width,img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width*scale); c.height = Math.round(img.height*scale);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+      c.toBlob(b=>{ URL.revokeObjectURL(img.src); b?resolve(b):reject(new Error("photo")); },"image/jpeg",0.75);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+function blobToDataUrl(b){ return new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(b); }); }
+
+/* ---------- 描画 ---------- */
+function counts(){ const c={}; drinks.forEach(d=>{ c[d.prefecture_id]=(c[d.prefecture_id]||0)+1; }); return c; }
+function colorFor(n){ return ["#ece5d3","#f6cf6b","#eda93c","#e08a1e","#c96a12"][Math.min(n,4)]; }
+
+let geoFeatures = null;
+function renderMap(){
+  const c = counts();
+  if(geoFeatures && window.d3){
+    const svg = d3.select("#map"); svg.selectAll("*").remove();
+    const fc = {type:"FeatureCollection",features:geoFeatures};
+    const proj = d3.geoMercator().fitExtent([[6,6],[794,814]], fc);
+    const path = d3.geoPath(proj);
+    svg.selectAll("path").data(geoFeatures).join("path")
+      .attr("d", path)
+      .attr("fill", d=>colorFor(c[d.properties.id]||0))
+      .on("click",(e,d)=>showPref(d.properties.id))
+      .append("title").text(d=>prefName(d.properties.id));
+    $("#mapNote").textContent = "";
+  }
+  // タイル
+  const tiles = $("#tiles"); tiles.innerHTML = "";
+  tiles.style.gridTemplateColumns = "repeat(12, 1fr)";
+  PREFS.forEach(([id,name,x,y])=>{
+    const t = document.createElement("div");
+    t.className = "tile"; t.style.gridColumn = (x+1); t.style.gridRow = (y+1);
+    t.style.background = colorFor(c[id]||0); t.style.color = (c[id]||0)? "#fff":"#7a6a52";
+    t.textContent = name.replace(/[県府都]$/,"");
+    t.onclick = ()=>showPref(id);
+    tiles.appendChild(t);
+  });
+  // 県リスト
+  const list = $("#prefList"); list.innerHTML = "";
+  PREFS.forEach(([id,name])=>{
+    const el = document.createElement("div"); el.className="pref-chip";
+    el.style.background = (c[id]||0)? "#fdf0d3":"#fff";
+    el.innerHTML = "<b>"+name+"</b>"+(c[id]? c[id]+"杯":"未制覇");
+    el.onclick = ()=>showPref(id);
+    list.appendChild(el);
+  });
+}
+function drinkHtml(d){
+  const img = d.photo_url ? '<img src="'+d.photo_url+'" alt="">' : '<img alt="" style="visibility:hidden">';
+  return '<div class="drink">'+img+'<div><b>'+esc(d.beer_name)+'</b> <span class="badge">'+esc(prefName(d.prefecture_id))+'</span>'+
+    '<div class="meta">'+esc(d.nickname||"")+(d.brewery? " ・ "+esc(d.brewery):"")+(d.style? " ・ "+esc(d.style):"")+'</div>'+
+    '<div class="meta">'+esc(d.drank_on||"")+(d.rating? " ・ ★"+esc(String(d.rating)):"")+'</div>'+
+    (d.memo? '<div>'+esc(d.memo)+'</div>':"")+
+    '<div style="margin-top:4px"><button class="danger" data-del="'+d.id+'">削除</button></div></div></div>';
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+function bindDelete(scope){
+  scope.querySelectorAll("[data-del]").forEach(b=>b.onclick = async ()=>{ if(confirm("この記録を削除しますか？")){ try{ await deleteDrink(b.dataset.del); toast("削除しました"); }catch(e){ toast("削除に失敗しました"); } } });
+}
+function render(){
+  const c = counts(); const done = Object.keys(c).length;
+  $("#progNum").textContent = done+" / 47県";
+  $("#progPct").textContent = Math.round(done/47*100)+"%";
+  $("#drinkCount").textContent = "・合計 "+drinks.length+" 杯";
+  $("#progBar").style.width = (done/47*100)+"%";
+  renderMap();
+  const rec = $("#recent");
+  rec.innerHTML = drinks.length? drinks.slice(0,30).map(drinkHtml).join("") : '<p class="note">まだ記録がありません。最初の一杯を登録しましょう。</p>';
+  bindDelete(rec);
+}
+function showPref(id){
+  const list = drinks.filter(d=>d.prefecture_id===id);
+  $("#prefCard").classList.remove("hidden");
+  $("#prefTitle").textContent = prefName(id)+"（"+list.length+"杯）";
+  const w = $("#prefDrinks");
+  w.innerHTML = list.length? list.map(drinkHtml).join("") : '<p class="note">まだ誰も飲んでいません。最初の1杯をどうぞ。</p>';
+  bindDelete(w);
+  $("#prefCard").scrollIntoView({behavior:"smooth"});
+}
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
+
+/* ---------- 地図データ ---------- */
+async function loadMap(){
+  try{
+    const res = await fetch("https://raw.githubusercontent.com/dataofjapan/land/master/japan.topojson");
+    if(!res.ok) throw new Error(res.status);
+    const topo = await res.json();
+    geoFeatures = topojson.feature(topo, topo.objects.japan).features;
+    renderMap();
+  }catch(e){
+    $("#mapNote").textContent = "地図データを読み込めなかったため、タイル表示に切り替えました。";
+    $("#mapWrap").classList.add("hidden"); $("#tileWrap").classList.remove("hidden");
+  }
+}
+
+/* ---------- イベント ---------- */
+$("#viewMapBtn").onclick = ()=>{ $("#mapWrap").classList.remove("hidden"); $("#tileWrap").classList.add("hidden"); };
+$("#viewTileBtn").onclick = ()=>{ $("#mapWrap").classList.add("hidden"); $("#tileWrap").classList.remove("hidden"); };
+$("#refreshBtn").onclick = ()=>fetchDrinks().then(()=>toast("更新しました")).catch(()=>toast("更新に失敗しました"));
+$("#closePrefBtn").onclick = ()=>$("#prefCard").classList.add("hidden");
+$("#copyLinkBtn").onclick = async ()=>{
+  const u = new URL(location.href);
+  if(live){ u.searchParams.set("sb", cfg.url); u.searchParams.set("k", cfg.key); }
+  const link = u.href;
+  try{ await navigator.clipboard.writeText(link); toast("招待リンクをコピーしました"); }
+  catch(e){ prompt("このリンクを友達に送ってください", link); }
+};
+$("#newRoomBtn").onclick = ()=>{
+  if(!confirm("新しいルームを作りますか？（今のルームの記録はリンクから戻れます）")) return;
+  const u = new URL(location.href); u.searchParams.set("room", Math.random().toString(36).slice(2,8)); location.href = u.href;
+};
+$("#settingsBtn").onclick = ()=>{ $("#settings").classList.toggle("hidden"); if(cfg){ $("#sbUrl").value=cfg.url||""; $("#sbKey").value=cfg.key||""; } };
+$("#saveSettingsBtn").onclick = ()=>{
+  const url = $("#sbUrl").value.trim(), key = $("#sbKey").value.trim();
+  if(!url || !key){ toast("URLとキーを両方入れてください"); return; }
+  localStorage.setItem("jb_config", JSON.stringify({url,key})); location.reload();
+};
+$("#clearSettingsBtn").onclick = ()=>{ localStorage.removeItem("jb_config"); location.reload(); };
+
+$("#drinkForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const nickname = $("#fNickname").value.trim();
+  localStorage.setItem("jb_nickname", nickname);
+  const file = $("#fPhoto").files[0];
+  let blob = null;
+  if(file){ try{ blob = await compressPhoto(file); }catch(err){ toast("写真の読み込みに失敗しました"); return; } }
+  const d = {
+    room_code: room, nickname,
+    prefecture_id: Number($("#fPref").value),
+    beer_name: $("#fBeer").value.trim(),
+    brewery: $("#fBrewery").value.trim() || null,
+    style: $("#fStyle").value.trim() || null,
+    rating: $("#fRating").value? Number($("#fRating").value) : null,
+    drank_on: $("#fDate").value || new Date().toISOString().slice(0,10),
+    memo: $("#fMemo").value.trim() || null
+  };
+  try{
+    await addDrink(d, blob);
+    if(live) await fetchDrinks();
+    e.target.reset(); $("#fNickname").value = nickname; $("#fDate").value = d.drank_on;
+    toast("記録しました！地図が塗られました 🍺");
+  }catch(err){ toast("保存に失敗しました。接続設定を確認してください"); }
+});
+
+/* ---------- 初期化 ---------- */
+(function init(){
+  $("#roomLabel").textContent = room;
+  const badge = $("#modeBadge");
+  if(live){ badge.textContent = "共有モード（Supabase接続中）"; badge.classList.remove("demo"); badge.classList.add("live"); }
+  const sel = $("#fPref");
+  sel.innerHTML = PREFS.map(([id,name])=>'<option value="'+id+'">'+name+'</option>').join("");
+  $("#fNickname").value = localStorage.getItem("jb_nickname")||"";
+  $("#fDate").value = new Date().toISOString().slice(0,10);
+  fetchDrinks().catch(()=>{ drinks=[]; render(); toast("読み込みに失敗しました"); });
+  loadMap();
+  if(live) setInterval(()=>fetchDrinks().catch(()=>{}), 20000);
+})();
+</script>
+</body>
+</html>
